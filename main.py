@@ -11,7 +11,7 @@ from datetime import datetime
 from typing import Any, AsyncIterator, Dict, List, Optional, Union
 
 import aiohttp
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import APIRouter, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
@@ -232,9 +232,12 @@ def transform_response_to_openai(bridge_data: Dict[str, Any], request_model: str
     }
 
 
-# --- Эндпоинты ---
+# --- Эндпоинты (роутер для /v1 и /api/v1) ---
 
-@app.get("/v1/models")
+api_router = APIRouter()
+
+
+@api_router.get("/models")
 async def list_models() -> Dict[str, Any]:
     """Список моделей в формате OpenAI для n8n."""
     return {
@@ -250,7 +253,7 @@ async def list_models() -> Dict[str, Any]:
     }
 
 
-@app.post("/v1/chat/completions")
+@api_router.post("/chat/completions")
 async def create_chat_completion(
     request: ChatCompletionRequest,
     authorization: Optional[str] = Header(None),
@@ -290,6 +293,10 @@ async def create_chat_completion(
     except Exception as e:
         logger.exception("Unexpected error in chat/completions")
         raise HTTPException(status_code=500, detail="Internal server error")
+
+
+app.include_router(api_router, prefix="/v1")
+app.include_router(api_router, prefix="/api/v1")
 
 
 @app.get("/health")

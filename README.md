@@ -21,10 +21,10 @@ docker compose logs -f bridge-gateway
 ## Настройка n8n
 
 1. В n8n создайте учётные данные типа **OpenAI**.
-2. **Base URL**: обязательно `http://<host>:<порт>/v1` **без** `/api` в пути.
-   - Локально: `http://localhost:8000/v1`
-   - По домену/порту: `http://sellerzen.ru:8008/v1`
-   - Из другой контейнерной сети (имя сервиса): `http://bridge-gateway:8000/v1`
+2. **Base URL** (как у OpenAI, поддерживаются оба варианта):
+   - `http://<host>:<порт>/api/v1` — рекомендуемый (как у OpenAI)
+   - `http://<host>:<порт>/v1` — тоже работает
+   - Примеры: `http://localhost:8000/api/v1`, `http://your-domain.com:8008/api/v1`, `http://bridge-gateway:8000/api/v1`
 3. **API Key**: ваш ключ для bridge (передаётся на бэкенд как `X-API-Key`).
 4. В узле AI Agent / Chat OpenAI выберите эту учётную запись и модель `deepseek-v3` (или значение `MODEL_NAME` из конфига).
 
@@ -43,8 +43,8 @@ docker compose logs -f bridge-gateway
 
 ## Эндпоинты
 
-- `GET /v1/models` — список моделей (OpenAI-формат).
-- `POST /v1/chat/completions` — чат (JSON и streaming).
+- `GET /v1/models` и `GET /api/v1/models` — список моделей (OpenAI-формат).
+- `POST /v1/chat/completions` и `POST /api/v1/chat/completions` — чат (JSON и streaming).
 - `GET /health` — проверка состояния для Docker/оркестрации.
 
 ## Локальная разработка
