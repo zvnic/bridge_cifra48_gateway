@@ -40,7 +40,10 @@ BRIDGE_COMPLETIONS_URL = os.getenv("BRIDGE_COMPLETIONS_URL", f"{BRIDGE_BASE_URL}
 DEFAULT_API_KEY = os.getenv("DEFAULT_API_KEY", "")
 MODEL_NAME = os.getenv("MODEL_NAME", "deepseek-v3")
 BRIDGE_MODEL = os.getenv("BRIDGE_MODEL", "deepseek-ai/DeepSeek-V3-0324")
-USER_AGENT = "Bridge-OpenAI-Gateway/1.0"
+USER_AGENT = os.getenv(
+    "USER_AGENT",
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+)
 
 
 def get_api_key(authorization: Optional[str], x_api_key: Optional[str]) -> str:
