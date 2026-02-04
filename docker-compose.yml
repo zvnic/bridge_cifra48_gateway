@@ -4,8 +4,10 @@ services:
   bridge-gateway:
     build: .
     image: bridge-openai-gateway:latest
+    env_file:
+      - .env
     ports:
-      - "8000:8000"
+      - "${PORT:-8000}:8000"
     environment:
       - BRIDGE_BASE_URL=https://bridge-back.admlr.lipetsk.ru
       - BRIDGE_COMPLETIONS_URL=https://bridge-back.admlr.lipetsk.ru/api/v1/completions

@@ -34,6 +34,7 @@ docker compose logs -f bridge-gateway
 | `MODEL_NAME` | Имя модели для n8n | `deepseek-v3` |
 | `BRIDGE_MODEL` | Имя модели в запросах к bridge | `deepseek-ai/DeepSeek-V3-0324` |
 | `DEFAULT_API_KEY` | Ключ по умолчанию (опционально) | — |
+| `PORT` | Порт на хосте (маппинг в docker-compose) | `8000` |
 
 Скопируйте `.env.example` в `.env` и при необходимости задайте переменные.
 
