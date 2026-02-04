@@ -26,7 +26,7 @@ docker compose logs -f bridge-gateway
    - `http://<host>:<порт>/v1` — тоже работает
    - Примеры: `http://localhost:8000/api/v1`, `http://your-domain.com:8008/api/v1`, `http://bridge-gateway:8000/api/v1`
 3. **API Key**: ваш ключ для bridge (передаётся на бэкенд как `X-API-Key`).
-4. В узле AI Agent / Chat OpenAI выберите эту учётную запись и модель `deepseek-v3` (или значение `MODEL_NAME` из конфига).
+4. В узле AI Agent / Chat OpenAI выберите учётную запись и модель. Для эмбеддингов: `bge-m3-multi`, `multilingual-e5-large`.
 
 ## Переменные окружения
 
@@ -43,8 +43,9 @@ docker compose logs -f bridge-gateway
 
 ## Эндпоинты
 
-- `GET /v1/models` и `GET /api/v1/models` — список моделей (OpenAI-формат).
+- `GET /v1/models` и `GET /api/v1/models` — список моделей (OpenAI-формат): чат-модели и `bge-m3-multi` для эмбеддингов.
 - `POST /v1/chat/completions` и `POST /api/v1/chat/completions` — чат (JSON и streaming).
+- `POST /v1/embeddings` и `POST /api/v1/embeddings` — эмбеддинги (модели `bge-m3-multi`, `multilingual-e5-large`).
 - `GET /health` — проверка состояния для Docker/оркестрации.
 
 ## Локальная разработка

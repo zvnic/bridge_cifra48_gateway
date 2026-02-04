@@ -37,9 +37,29 @@ app.add_middleware(
 # Конфигурация
 BRIDGE_BASE_URL = os.getenv("BRIDGE_BASE_URL", "https://bridge-back.admlr.lipetsk.ru").rstrip("/")
 BRIDGE_COMPLETIONS_URL = os.getenv("BRIDGE_COMPLETIONS_URL", f"{BRIDGE_BASE_URL}/api/v1/completions")
+BRIDGE_EMBEDDINGS_URL = os.getenv("BRIDGE_EMBEDDINGS_URL", f"{BRIDGE_BASE_URL}/api/v1/embeddings")
 DEFAULT_API_KEY = os.getenv("DEFAULT_API_KEY", "")
 MODEL_NAME = os.getenv("MODEL_NAME", "deepseek-v3")
 BRIDGE_MODEL = os.getenv("BRIDGE_MODEL", "deepseek-ai/DeepSeek-V3-0324")
+# Маппинг имён моделей для клиента → bridge (один endpoint, разные model в body)
+BRIDGE_MODEL_MAP: Dict[str, str] = {
+    "deepseek-v3": "deepseek-ai/DeepSeek-V3-0324",
+    "gemma-3-27b-it": "google/gemma-3-27b-it",
+    "llama-4-maverick-17b": "meta-llama/Llama-4-Maverick-17B-128E-Instruct-FP8",
+    "qwen2.5-vl-32b": "Qwen/Qwen2.5-VL-32B-Instruct",
+}
+BRIDGE_EMBEDDING_MODEL_MAP: Dict[str, str] = {
+    "bge-m3-multi": "BAAI/bge-m3-multi",
+    "multilingual-e5-large": "intfloat/multilingual-e5-large",
+}
+MODELS_LIST = [
+    {"id": "deepseek-v3", "object": "model", "owned_by": "bridge"},
+    {"id": "gemma-3-27b-it", "object": "model", "owned_by": "bridge"},
+    {"id": "llama-4-maverick-17b", "object": "model", "owned_by": "bridge"},
+    {"id": "qwen2.5-vl-32b", "object": "model", "owned_by": "bridge"},
+    {"id": "bge-m3-multi", "object": "model", "owned_by": "bridge"},
+    {"id": "multilingual-e5-large", "object": "model", "owned_by": "bridge"},
+]
 USER_AGENT = os.getenv(
     "USER_AGENT",
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
@@ -65,6 +85,13 @@ class ChatMessage(BaseModel):
     name: Optional[str] = None
 
 
+class EmbeddingRequest(BaseModel):
+    input: Union[str, List[str]]
+    model: str = Field(default="bge-m3-multi")
+    encoding_format: Optional[str] = Field(default="float")
+    user: Optional[str] = None
+
+
 class ChatCompletionRequest(BaseModel):
     model: str = Field(default=MODEL_NAME)
     messages: List[ChatMessage]
@@ -81,9 +108,15 @@ class ChatCompletionRequest(BaseModel):
 
 # --- Запрос к bridge (нестриминг) ---
 
+def resolve_bridge_model(client_model: str) -> str:
+    """Имя модели для bridge: из маппинга или как есть."""
+    return BRIDGE_MODEL_MAP.get(client_model, client_model)
+
+
 async def bridge_request_json(
     messages: List[Dict[str, Any]],
     api_key: str,
+    bridge_model: str,
     stream: bool = False,
     temperature: float = 0.7,
     max_tokens: Optional[int] = None,
@@ -97,7 +130,7 @@ async def bridge_request_json(
     }
     payload: Dict[str, Any] = {
         "messages": messages,
-        "model": BRIDGE_MODEL,
+        "model": bridge_model,
         "stream": stream,
     }
     if temperature is not None:
@@ -120,6 +153,7 @@ async def bridge_request_json(
 async def bridge_request_stream(
     messages: List[Dict[str, Any]],
     api_key: str,
+    bridge_model: str,
     temperature: float = 0.7,
     max_tokens: Optional[int] = None,
     request_model: str = MODEL_NAME,
@@ -133,7 +167,7 @@ async def bridge_request_stream(
     }
     payload: Dict[str, Any] = {
         "messages": messages,
-        "model": BRIDGE_MODEL,
+        "model": bridge_model,
         "stream": True,
     }
     if temperature is not None:
@@ -232,6 +266,37 @@ def transform_response_to_openai(bridge_data: Dict[str, Any], request_model: str
     }
 
 
+def resolve_embedding_bridge_model(client_model: str) -> str:
+    """Имя модели эмбеддингов для bridge."""
+    return BRIDGE_EMBEDDING_MODEL_MAP.get(client_model, client_model)
+
+
+async def bridge_request_embeddings(
+    input_data: Union[str, List[str]],
+    api_key: str,
+    bridge_model: str,
+    encoding_format: Optional[str] = "float",
+) -> Dict[str, Any]:
+    """Запрос эмбеддингов к bridge."""
+    headers = {
+        "X-API-Key": api_key,
+        "User-Agent": USER_AGENT,
+        "Content-Type": "application/json",
+    }
+    payload: Dict[str, Any] = {
+        "input": input_data,
+        "model": bridge_model,
+        "encoding_format": encoding_format or "float",
+    }
+    async with aiohttp.ClientSession() as session:
+        async with session.post(BRIDGE_EMBEDDINGS_URL, headers=headers, json=payload) as resp:
+            if resp.status not in (200, 201):
+                err_text = await resp.text()
+                logger.error("Bridge embeddings error %s: %s", resp.status, err_text[:500])
+                raise HTTPException(status_code=resp.status, detail=err_text or "Bridge embeddings error")
+            return await resp.json()
+
+
 # --- Эндпоинты (роутер для /v1 и /api/v1) ---
 
 api_router = APIRouter()
@@ -240,15 +305,11 @@ api_router = APIRouter()
 @api_router.get("/models")
 async def list_models() -> Dict[str, Any]:
     """Список моделей в формате OpenAI для n8n."""
+    now = int(datetime.now().timestamp())
     return {
         "object": "list",
         "data": [
-            {
-                "id": MODEL_NAME,
-                "object": "model",
-                "created": int(datetime.now().timestamp()),
-                "owned_by": "bridge",
-            }
+            {**m, "created": now} for m in MODELS_LIST
         ],
     }
 
@@ -261,6 +322,7 @@ async def create_chat_completion(
 ):
     """Чат-комплишены: проксирование на bridge с форматом OpenAI."""
     api_key = get_api_key(authorization, x_api_key)
+    bridge_model = resolve_bridge_model(request.model)
 
     messages = [{"role": m.role, "content": m.content} for m in request.messages]
 
@@ -269,6 +331,7 @@ async def create_chat_completion(
             stream_gen = bridge_request_stream(
                 messages=messages,
                 api_key=api_key,
+                bridge_model=bridge_model,
                 temperature=request.temperature,
                 max_tokens=request.max_tokens,
                 request_model=request.model,
@@ -282,6 +345,7 @@ async def create_chat_completion(
             response = await bridge_request_json(
                 messages=messages,
                 api_key=api_key,
+                bridge_model=bridge_model,
                 stream=False,
                 temperature=request.temperature,
                 max_tokens=request.max_tokens,
@@ -292,6 +356,30 @@ async def create_chat_completion(
         raise
     except Exception as e:
         logger.exception("Unexpected error in chat/completions")
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+@api_router.post("/embeddings")
+async def create_embeddings(
+    request: EmbeddingRequest,
+    authorization: Optional[str] = Header(None),
+    x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
+):
+    """Эмбеддинги: проксирование на bridge (BGE-M3 и др.)."""
+    api_key = get_api_key(authorization, x_api_key)
+    bridge_model = resolve_embedding_bridge_model(request.model)
+    try:
+        response = await bridge_request_embeddings(
+            input_data=request.input,
+            api_key=api_key,
+            bridge_model=bridge_model,
+            encoding_format=request.encoding_format,
+        )
+        return JSONResponse(content=response)
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Unexpected error in embeddings")
         raise HTTPException(status_code=500, detail="Internal server error")
 
 
