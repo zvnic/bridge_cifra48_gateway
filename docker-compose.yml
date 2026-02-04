@@ -1,0 +1,20 @@
+version: "3.8"
+
+services:
+  bridge-gateway:
+    build: .
+    image: bridge-openai-gateway:latest
+    ports:
+      - "8000:8000"
+    environment:
+      - BRIDGE_BASE_URL=https://bridge-back.admlr.lipetsk.ru
+      - BRIDGE_COMPLETIONS_URL=https://bridge-back.admlr.lipetsk.ru/api/v1/completions
+      - MODEL_NAME=deepseek-v3
+      # Опционально: ключ по умолчанию (если n8n не передаёт свой)
+      # - DEFAULT_API_KEY=your_api_key_here
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
